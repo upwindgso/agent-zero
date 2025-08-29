@@ -52,6 +52,10 @@ Once the planner agent returns a structured plan, you must perform the following
 
 1.  **Prepare for Execution:** In your `<scratchpad>`, confirm that you have received the `plan.json` file from the planner.
 2.  **Perform File Operations:** Save the JSON plan to a local file named `plan.json` and create an empty `results.md` file.
+3.  **Confirm the plan with the user:** Present the plan to the user and ask for confirmation:
+    - If the user confirms the plan, continue to **Step 5**. 
+    - If the user requests changes, return to **Step 3**.
+
 
 ---
 
@@ -82,7 +86,7 @@ You will now enter an execution loop that continues until all tasks in `plan.jso
 
                 ### **2. Autonomy and Approach**
 
-                **You are the expert on *how* to achieve the mission's objective.** We are delegating the methodology to you. Leverage your persona and expertise to determine the most effective and efficient way to satisfy the requirements outlined in the "Boundaries & Deliverables" section below. Your focus should be on the quality and accuracy of the final output, not a prescribed process.
+                **You are the expert on *how* to achieve the mission's objective.** We are delegating the methodology to you. Leverage your persona, expertise, and memory of past experiences/solutions to determine the most effective and efficient way to satisfy the requirements outlined in the "Boundaries & Deliverables" section below. Your focus should be on the quality and accuracy of the final output, not a prescribed process.
 
                 ### **3. Task Boundaries & Deliverables**
 
