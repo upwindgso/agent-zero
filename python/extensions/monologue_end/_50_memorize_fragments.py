@@ -40,10 +40,10 @@ class MemorizeMemories(Extension):
 
     async def memorize(self, loop_data: LoopData, log_item: LogItem, **kwargs):
 
-            set = settings.get_settings()
+        set = settings.get_settings()
 
-            db = await Memory.get(self.agent)
-
+        db = await Memory.get(self.agent)
+        
         try:
             
             # get system message and chat history for util llm
@@ -61,6 +61,8 @@ class MemorizeMemories(Extension):
                 callback=log_callback,
                 background=True,
             )
+
+            
         except Exception as e:
             if "interpreter shutdown" in str(e) or "cannot schedule new futures" in str(e):
                 log_item.update(heading="Memorization interrupted due to shutdown.")
