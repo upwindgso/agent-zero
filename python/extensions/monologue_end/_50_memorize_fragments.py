@@ -24,31 +24,48 @@ class MemorizeMemories(Extension):
             heading="Memorizing new information...",
         )
 
-        # memorize in background
-        task = asyncio.create_task(self.memorize(loop_data, log_item))
-        return task
+        # memorize in background with proper task management
+        try:
+            task = asyncio.create_task(self.memorize(loop_data, log_item))
+            # Store task reference to prevent garbage collection
+            if not hasattr(self.agent.context, '_background_tasks'):
+                self.agent.context._background_tasks = set()
+            self.agent.context._background_tasks.add(task)
+            task.add_done_callback(self.agent.context._background_tasks.discard)
+        except RuntimeError as e:
+            if "interpreter shutdown" in str(e):
+                log_item.update(heading="Skipping memorization due to shutdown.")
+                return
+            raise
 
     async def memorize(self, loop_data: LoopData, log_item: LogItem, **kwargs):
 
-        set = settings.get_settings()
+            set = settings.get_settings()
 
-        db = await Memory.get(self.agent)
+            db = await Memory.get(self.agent)
 
-        # get system message and chat history for util llm
-        system = self.agent.read_prompt("memory.memories_sum.sys.md")
-        msgs_text = self.agent.concat_messages(self.agent.history)
+        try:
+            
+            # get system message and chat history for util llm
+            system = self.agent.read_prompt("memory.memories_sum.sys.md")
+            msgs_text = self.agent.concat_messages(self.agent.history)
 
-        # log query streamed by LLM
-        async def log_callback(content):
-            log_item.stream(content=content)
+            # log query streamed by LLM
+            async def log_callback(content):
+                log_item.stream(content=content)
 
-        # call util llm to find info in history
-        memories_json = await self.agent.call_utility_model(
-            system=system,
-            message=msgs_text,
-            callback=log_callback,
-            background=True,
-        )
+            # call util llm to find info in history
+            memories_json = await self.agent.call_utility_model(
+                system=system,
+                message=msgs_text,
+                callback=log_callback,
+                background=True,
+            )
+        except Exception as e:
+            if "interpreter shutdown" in str(e) or "cannot schedule new futures" in str(e):
+                log_item.update(heading="Memorization interrupted due to shutdown.")
+                return
+            raise
 
         # Add validation and error handling for memories_json
         if not memories_json or not isinstance(memories_json, str):

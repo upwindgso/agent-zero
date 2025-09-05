@@ -59,6 +59,23 @@ class ModelType(Enum):
     EMBEDDING = "Embedding"
 
 
+class ModelProvider(Enum):
+    ANTHROPIC = "Anthropic"
+    DEEPSEEK = "DeepSeek"
+    GEMINI = "Google"
+    GOOGLE = "Google"  # Alias for backward compatibility
+    GROQ = "Groq"
+    HUGGINGFACE = "HuggingFace"
+    LM_STUDIO = "LM Studio"
+    MISTRAL = "Mistral AI"
+    OLLAMA = "Ollama"
+    OPENAI = "OpenAI"
+    AZURE = "OpenAI Azure"
+    OPENROUTER = "OpenRouter"
+    SAMBANOVA = "Sambanova"
+    OTHER = "Other OpenAI compatible"
+
+
 @dataclass
 class ModelConfig:
     type: ModelType

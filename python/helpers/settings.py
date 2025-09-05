@@ -103,6 +103,33 @@ class Settings(TypedDict):
     a2a_server_enabled: bool
     
 
+    # mem0 settings
+    memory_backend: str
+    mem0_enabled: bool
+    mem0_provider: str
+    mem0_api_key: str
+    mem0_user_id_strategy: str
+    mem0_metadata_enrichment: bool
+    mem0_vector_store_config: dict[str, str]
+    mem0_preload_knowledge: bool
+    mem0_max_knowledge_docs: int
+    
+    # Enhanced mem0 deployment options
+    mem0_deployment: str  # "local", "self_hosted", "hosted"
+    mem0_org_id: str
+    mem0_project_id: str
+    mem0_qdrant_url: str
+    mem0_qdrant_collection: str
+    mem0_qdrant_api_key: str
+    
+    # Graph Memory (Neo4j) settings
+    mem0_enable_graph_memory: bool
+    mem0_auto_start_services: bool
+    mem0_neo4j_url: str
+    mem0_neo4j_username: str
+    mem0_neo4j_password: str
+    mem0_graph_custom_prompt: str
+
 
 class PartialSettings(Settings, total=False):
     pass
@@ -1166,6 +1193,229 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "backup",
     }
 
+    # mem0
+    mem0_fields: list[SettingsField] = []
+
+    mem0_fields.append(
+        {
+            "id": "memory_backend",
+            "title": "Memory Backend",
+            "description": "Choose the memory backend to use for agent memory storage. FAISS is the default, mem0 provides advanced memory features.",
+            "type": "select",
+            "value": settings["memory_backend"],
+            "options": [
+                {"value": "faiss", "label": "FAISS (Default)"},
+                {"value": "mem0", "label": "mem0 (Advanced)"},
+            ],
+        }
+    )
+
+    mem0_fields.append(
+        {
+            "id": "mem0_enabled",
+            "title": "Enable mem0 Features",
+            "description": "Enable advanced mem0 memory features including user-specific memory and automatic organization.",
+            "type": "switch",
+            "value": settings["mem0_enabled"],
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_deployment",
+            "title": "Deployment Mode",
+            "description": "Choose mem0 deployment mode. Hosted platform (recommended) avoids storage conflicts and provides enterprise features. Self-hosted uses remote backends. Local uses in-memory storage.",
+            "type": "select",
+            "value": settings.get("mem0_deployment", "local"),
+            "options": [
+                {"value": "hosted", "label": "Hosted Platform (Recommended)"},
+                {"value": "self_hosted", "label": "Self-Hosted with Remote Backends"},
+                {"value": "local", "label": "Local OpenMemory"},
+            ],
+        }
+    )
+
+    mem0_fields.append(
+        {
+            "id": "mem0_provider",
+            "title": "mem0 Provider",
+            "description": "LLM provider for mem0 memory processing. Uses utility model settings by default.",
+            "type": "select",
+            "value": settings["mem0_provider"],
+            "options": [
+                {"value": "litellm", "label": "LiteLLM (Default)"},
+                {"value": "openai", "label": "OpenAI"},
+                {"value": "anthropic", "label": "Anthropic"},
+                {"value": "ollama", "label": "Ollama"},
+            ],
+        }
+    )
+
+    mem0_fields.append(
+        {
+            "id": "mem0_api_key",
+            "title": "mem0 API Key",
+            "description": "API key for mem0 hosted platform service.",
+            "type": "password",
+            "value": (
+                PASSWORD_PLACEHOLDER
+                if settings["mem0_api_key"]
+                else ""
+            ),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_org_id",
+            "title": "Organization ID",
+            "description": "Organization ID for mem0 hosted platform (optional).",
+            "type": "text",
+            "value": settings.get("mem0_org_id", ""),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_project_id",
+            "title": "Project ID",
+            "description": "Project ID for mem0 hosted platform (optional).",
+            "type": "text",
+            "value": settings.get("mem0_project_id", ""),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_qdrant_url",
+            "title": "Qdrant Server URL",
+            "description": "URL for remote Qdrant server (for self-hosted deployment).",
+            "type": "text",
+            "value": settings.get("mem0_qdrant_url", "http://localhost:6333"),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_qdrant_collection",
+            "title": "Qdrant Collection Name",
+            "description": "Name of the Qdrant collection to use for storing vector embeddings.",
+            "type": "text",
+            "value": settings.get("mem0_qdrant_collection", "mem0"),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_qdrant_api_key",
+            "title": "Qdrant API Key",
+            "description": "API key for remote Qdrant server (optional).",
+            "type": "password",
+            "value": (
+                PASSWORD_PLACEHOLDER
+                if settings.get("mem0_qdrant_api_key")
+                else ""
+            ),
+        }
+    )
+
+    # Neo4j Graph Memory Settings
+    mem0_fields.append(
+        {
+            "id": "mem0_enable_graph_memory",
+            "title": "Enable Graph Memory",
+            "description": "Enable Neo4j graph memory for storing relationships and entities.",
+            "type": "switch",
+            "value": settings.get("mem0_enable_graph_memory", True),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_auto_start_services",
+            "title": "Auto-Start Services",
+            "description": "Automatically start required Docker services (Qdrant, Neo4j) when mem0 is enabled.",
+            "type": "switch",
+            "value": settings.get("mem0_auto_start_services", True),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_neo4j_url",
+            "title": "Neo4j URL",
+            "description": "Connection URL for Neo4j database (bolt://host:port).",
+            "type": "text",
+            "value": settings.get("mem0_neo4j_url", "bolt://localhost:7688"),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_neo4j_username",
+            "title": "Neo4j Username",
+            "description": "Username for Neo4j database connection.",
+            "type": "text",
+            "value": settings.get("mem0_neo4j_username", "neo4j"),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_neo4j_password",
+            "title": "Neo4j Password",
+            "description": "Password for Neo4j database connection.",
+            "type": "password",
+            "value": (
+                PASSWORD_PLACEHOLDER
+                if settings.get("mem0_neo4j_password")
+                else ""
+            ),
+        }
+    )
+    mem0_fields.append(
+        {
+            "id": "mem0_graph_custom_prompt",
+            "title": "Graph Custom Prompt",
+            "description": "Custom prompt for graph memory operations (optional).",
+            "type": "textarea",
+            "value": settings.get("mem0_graph_custom_prompt", ""),
+        }
+    )
+
+    mem0_fields.append(
+        {
+            "id": "mem0_user_id_strategy",
+            "title": "User ID Strategy",
+            "description": "Strategy for generating user IDs in mem0 to separate memories between different contexts.",
+            "type": "select",
+            "value": settings["mem0_user_id_strategy"],
+            "options": [
+                {"value": "memory_subdir", "label": "Memory Subdirectory"},
+                {"value": "session_id", "label": "Session ID"},
+                {"value": "agent_id", "label": "Agent ID"},
+            ],
+        }
+    )
+
+    mem0_fields.append(
+        {
+            "id": "mem0_metadata_enrichment",
+            "title": "Metadata Enrichment",
+            "description": "Enable automatic metadata enrichment for improved memory organization and retrieval.",
+            "type": "switch",
+            "value": settings["mem0_metadata_enrichment"],
+        }
+    )
+
+    mem0_fields.append(
+        {
+            "id": "mem0_vector_store_config",
+            "title": "Vector Store Configuration",
+            "description": "Advanced configuration for mem0 vector store backend. Format is KEY=VALUE on individual lines.",
+            "type": "textarea",
+            "value": _dict_to_env(settings["mem0_vector_store_config"]),
+        }
+    )
+
+    mem0_section: SettingsSection = {
+        "id": "mem0",
+        "title": "mem0",
+        "description": "Advanced memory backend powered by mem0 for enhanced memory capabilities including user-specific memory, automatic organization, and improved retrieval.",
+        "fields": mem0_fields,
+        "tab": "agent",
+    }
+
     # Add the section to the result
     result: SettingsOutput = {
         "sections": [
@@ -1176,6 +1426,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             embed_model_section,
             memory_section,
             speech_section,
+            mem0_section,
             api_keys_section,
             auth_section,
             mcp_client_section,
@@ -1213,7 +1464,7 @@ def convert_in(settings: dict) -> Settings:
                 )
 
                 if not should_skip:
-                    if field["id"].endswith("_kwargs"):
+                    if field["id"].endswith("_kwargs") or field["id"] == "mem0_vector_store_config":
                         current[field["id"]] = _env_to_dict(field["value"])
                     elif field["id"].startswith("api_key_"):
                         current["api_keys"][field["id"]] = field["value"]
@@ -1286,6 +1537,15 @@ def _adjust_to_version(settings: Settings, default: Settings):
         if "agent_profile" not in settings or settings["agent_profile"] == "default":
             settings["agent_profile"] = "agent0"
 
+    
+    # Handle GOOGLE -> GEMINI provider migration (backward compatibility)
+    # Keep both GOOGLE and GEMINI as valid provider names
+    provider_fields = ["chat_model_provider", "util_model_provider", "embed_model_provider", "browser_model_provider"]
+    for field in provider_fields:
+        if field in settings and settings[field] == "GOOGLE":
+            # Both GOOGLE and GEMINI are now valid, so no need to change
+            # The enum now supports both keys
+            pass
 
 def _read_settings_file() -> Settings | None:
     if os.path.exists(SETTINGS_FILE):
@@ -1311,6 +1571,8 @@ def _remove_sensitive_settings(settings: Settings):
     settings["rfc_password"] = ""
     settings["root_password"] = ""
     settings["mcp_server_token"] = ""
+    settings["mem0_api_key"] = ""
+    settings["mem0_qdrant_api_key"] = ""
 
 
 def _write_sensitive_settings(settings: Settings):
@@ -1322,6 +1584,10 @@ def _write_sensitive_settings(settings: Settings):
         dotenv.save_dotenv_value(dotenv.KEY_AUTH_PASSWORD, settings["auth_password"])
     if settings["rfc_password"]:
         dotenv.save_dotenv_value(dotenv.KEY_RFC_PASSWORD, settings["rfc_password"])
+    if settings["mem0_api_key"]:
+        dotenv.save_dotenv_value("MEM0_API_KEY", settings["mem0_api_key"])
+    if settings["mem0_qdrant_api_key"]:
+        dotenv.save_dotenv_value("MEM0_QDRANT_API_KEY", settings["mem0_qdrant_api_key"])
 
     if settings["root_password"]:
         dotenv.save_dotenv_value(dotenv.KEY_ROOT_PASSWORD, settings["root_password"])
@@ -1404,6 +1670,31 @@ def get_default_settings() -> Settings:
         mcp_server_enabled=False,
         mcp_server_token=create_auth_token(),
         a2a_server_enabled=False,
+        # mem0
+        memory_backend="faiss",
+        mem0_enabled=False,
+        mem0_provider="litellm",
+        mem0_api_key="",
+        mem0_user_id_strategy="memory_subdir",
+        mem0_metadata_enrichment=True,
+        mem0_vector_store_config={},
+        mem0_preload_knowledge=True,
+        mem0_max_knowledge_docs=100,
+        # Enhanced mem0 deployment options
+        mem0_deployment="local",
+        mem0_org_id="",
+        mem0_project_id="",
+        mem0_qdrant_url="http://localhost:6333",
+        mem0_qdrant_collection="mem0",
+        mem0_qdrant_api_key="",
+        # Graph Memory settings
+        mem0_enable_graph_memory=True,
+        mem0_auto_start_services=True,
+        mem0_neo4j_url="bolt://localhost:7688",
+        mem0_neo4j_username="neo4j",
+        mem0_neo4j_password="mem0graph",
+        mem0_graph_custom_prompt="",
+        mem0_graph_llm_config={},
     )
 
 
@@ -1428,13 +1719,82 @@ def _apply_settings(previous: Settings | None):
                 whisper.preload, _settings["stt_model_size"]
             )  # TODO overkill, replace with background task
 
-        # force memory reload on embedding model change
+        # force memory reload on embedding model change or memory backend change
         if not previous or (
             _settings["embed_model_name"] != previous["embed_model_name"]
             or _settings["embed_model_provider"] != previous["embed_model_provider"]
             or _settings["embed_model_kwargs"] != previous["embed_model_kwargs"]
+            or _settings["memory_backend"] != previous.get("memory_backend", "faiss")
+            or _settings["mem0_enabled"] != previous.get("mem0_enabled", False)
+            or _settings["mem0_provider"] != previous.get("mem0_provider", "litellm")
+            or _settings["mem0_vector_store_config"] != previous.get("mem0_vector_store_config", {})
+            or _settings["mem0_deployment"] != previous.get("mem0_deployment", "local")
+            or _settings["mem0_api_key"] != previous.get("mem0_api_key", "")
+            or _settings["mem0_qdrant_url"] != previous.get("mem0_qdrant_url", "")
+            or _settings["mem0_qdrant_api_key"] != previous.get("mem0_qdrant_api_key", "")
+            or _settings["mem0_enable_graph_memory"] != previous.get("mem0_enable_graph_memory", False)
+            or _settings["mem0_auto_start_services"] != previous.get("mem0_auto_start_services", True)
+            or _settings["mem0_neo4j_url"] != previous.get("mem0_neo4j_url", "bolt://localhost:7687")
+            or _settings["mem0_neo4j_username"] != previous.get("mem0_neo4j_username", "neo4j")
+            or _settings["mem0_neo4j_password"] != previous.get("mem0_neo4j_password", "mem0graph")
         ):
             from python.helpers.memory import reload as memory_reload
+
+            # Proactively start mem0 services if mem0 is being enabled
+            if (_settings["memory_backend"] == "mem0" and _settings["mem0_enabled"] and
+                _settings.get("mem0_auto_start_services", True)):
+                from python.helpers.print_style import PrintStyle
+                
+                # Check if mem0 was just enabled (not previously enabled)
+                mem0_just_enabled = (not previous or 
+                                   previous.get("memory_backend") != "mem0" or 
+                                   not previous.get("mem0_enabled", False))
+                
+                if mem0_just_enabled:
+                    PrintStyle.standard("🚀 mem0 enabled - setting up services...")
+                    
+                    try:
+                        from python.helpers.docker_service_manager import docker_service_manager
+                        import asyncio
+                        import threading
+                        
+                        def setup_services():
+                            """Setup services in background thread"""
+                            try:
+                                # Run service setup in a new event loop
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                
+                                # Determine required services
+                                required_services = ["mem0_store", "neo4j"]  # Always start both for robust mem0 setup
+                                
+                                # Note: Neo4j is always started to ensure Graph Memory is available
+                                # It can be disabled later via mem0_enable_graph_memory setting
+                                
+                                # Start services
+                                results = docker_service_manager.ensure_services_running(required_services)
+                                
+                                success_count = sum(1 for success in results.values() if success)
+                                total_count = len(results)
+                                
+                                if success_count == total_count:
+                                    PrintStyle.standard(f"✅ All {total_count} mem0 services started successfully!")
+                                else:
+                                    PrintStyle.warning(f"⚠️ {success_count}/{total_count} services started - will use fallbacks")
+                                    
+                                loop.close()
+                                
+                            except Exception as e:
+                                PrintStyle.warning(f"Service auto-start failed: {str(e)} - will use fallbacks")
+                        
+                        # Start services in background thread to not block settings application
+                        thread = threading.Thread(target=setup_services, daemon=True)
+                        thread.start()
+                        
+                    except ImportError:
+                        PrintStyle.info("Docker service manager not available - services will start when first accessed")
+                    except Exception as e:
+                        PrintStyle.warning(f"Service setup failed: {str(e)} - services will start when first accessed")
 
             memory_reload()
 

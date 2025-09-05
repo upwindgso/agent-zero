@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from openai import BaseModel
 from pydantic import Field
 from fastmcp import FastMCP
+import fastmcp
 
 from agent import AgentContext, AgentContextType, UserMessage
 from python.helpers.persist_chat import remove_chat
@@ -296,20 +297,19 @@ class DynamicMcpProxy:
         http_path = f"/t-{self.token}/http"
         message_path = f"/t-{self.token}/messages/"
 
-        # Update settings in the MCP server instance if provided
-        mcp_server.settings.message_path = message_path
-        mcp_server.settings.sse_path = sse_path
+        # Update global settings (new FastMCP API)
+        fastmcp.settings.message_path = message_path
+        fastmcp.settings.sse_path = sse_path
 
         # Create new MCP apps with updated settings
         with self._lock:
             self.sse_app = create_sse_app(
                 server=mcp_server,
-                message_path=mcp_server.settings.message_path,
-                sse_path=mcp_server.settings.sse_path,
-                auth_server_provider=mcp_server._auth_server_provider,
-                auth_settings=mcp_server.settings.auth,
-                debug=mcp_server.settings.debug,
-                routes=mcp_server._additional_http_routes,
+                message_path=message_path,
+                sse_path=sse_path,
+                # auth=[],
+                # debug=[],
+                routes=getattr(mcp_server, '_additional_http_routes', None),
                 middleware=[Middleware(BaseHTTPMiddleware, dispatch=mcp_middleware)],
             )
 
