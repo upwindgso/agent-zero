@@ -40,3 +40,9 @@ instruments/**
 # Global rule to include .gitkeep files anywhere
 !**/.gitkeep
 agent_history.gif
+
+# internal building docs
+#todo.md
+*.bak
+
+*.zip
