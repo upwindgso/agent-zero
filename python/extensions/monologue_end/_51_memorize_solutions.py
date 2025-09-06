@@ -13,9 +13,9 @@ class MemorizeSolutions(Extension):
     async def execute(self, loop_data: LoopData = LoopData(), **kwargs):
         # try:
 
-        set = settings.get_settings()
+        cfg = settings.get_settings()
 
-        if not set["memory_memorize_enabled"]:
+        if not cfg["memory_memorize_enabled"]:
             return
  
         # show full util message
@@ -41,7 +41,7 @@ class MemorizeSolutions(Extension):
     async def memorize(self, loop_data: LoopData, log_item: LogItem, **kwargs):
         try:
             
-            set = settings.get_settings()
+            cfg = settings.get_settings()
 
             db = await Memory.get(self.agent)
 
@@ -122,7 +122,7 @@ class MemorizeSolutions(Extension):
                 # If solution is not a dict, convert it to string
                 txt = f"# Solution\n {str(solution)}"
 
-            if set["memory_memorize_consolidation"]:
+            if cfg["memory_memorize_consolidation"]:
                 try:
                     # Use intelligent consolidation system
                     from python.helpers.memory_consolidation import create_memory_consolidator
@@ -186,10 +186,10 @@ class MemorizeSolutions(Extension):
                 )
             else:
                 # remove previous solutions too similiar to this one
-                if set["memory_memorize_replace_threshold"] > 0:
+                if cfg["memory_memorize_replace_threshold"] > 0:
                     rem += await db.delete_documents_by_query(
                         query=txt,
-                        threshold=set["memory_memorize_replace_threshold"],
+                        threshold=cfg["memory_memorize_replace_threshold"],
                         filter=f"area=='{Memory.Area.SOLUTIONS.value}'",
                     )
                     if rem:

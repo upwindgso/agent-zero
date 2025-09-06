@@ -11,6 +11,9 @@ from agent import Agent
 import models
 import asyncio
 
+from python.helpers import dotenv
+from python.helpers.dotenv import load_dotenv
+load_dotenv()
 
 class Mem0Memory:
     """
@@ -116,11 +119,11 @@ class Mem0Memory:
         return "bolt://localhost:7688"
 
     def _qdrant_http_healthy(self, base_url: str, timeout: float = 3.0) -> bool:
-        PrintStyle.info(f"Qdrant base_url:{base_url}")
+        #PrintStyle.info(f"Qdrant base_url:{base_url}")
         try:
             import requests
             r = requests.get(f"{base_url.rstrip('/')}/collections", timeout=timeout)
-            PrintStyle.info(f"Qdrant status_code:{r.status_code}")
+            #PrintStyle.info(f"Qdrant status_code:{r.status_code}")
             return r.status_code == 200
         except Exception as e:
             PrintStyle.error(f"Qdrant health check error for {base_url}: {e.__class__.__name__}: {e}")
@@ -147,7 +150,7 @@ class Mem0Memory:
         import os
         override = settings.get("mem0_qdrant_url") or os.getenv("MEM0_QDRANT_URL")
         if override:
-            PrintStyle.info(f"Qdrant URL override detected: {override}")
+            #PrintStyle.info(f"Qdrant URL override detected: {override}")
             # If override points to localhost but service-DNS is resolvable/healthy, prefer service-DNS
             if "localhost" in override:
                 svc = "http://mem0_store:6333"
@@ -173,7 +176,7 @@ class Mem0Memory:
         from urllib.parse import urlparse
         override = settings.get("mem0_neo4j_url") or os.getenv("NEO4J_URL")
         if override:
-            PrintStyle.info(f"Neo4j URL override detected: {override}")
+            #PrintStyle.info(f"Neo4j URL override detected: {override}")
             # If override points to localhost but service-DNS is reachable, prefer service-DNS
             if "localhost" in override and self._dns_resolves("neo4j") and self._tcp_port_open("neo4j", 7687):
                 PrintStyle.info("Using neo4j service DNS for Bolt instead of localhost override")
@@ -371,7 +374,8 @@ class Mem0Memory:
                 "config": {
                     "url": qdrant_url,
                     "collection_name": f"agent_zero_{self.memory_subdir}",
-                    "api_key": settings.get("mem0_qdrant_api_key")
+                    "api_key": settings.get("mem0_qdrant_api_key"),
+                    "embedding_model_dims": 384 # this is a hacky solution to hard code...sorry future me
                 }
             }
         
@@ -391,6 +395,7 @@ class Mem0Memory:
                     "url": qdrant_url,
                     "collection_name": collection_name,
                     "api_key": settings.get("mem0_qdrant_api_key"),  # Optional
+                    "embedding_model_dims": 384 # this is a hacky solution to hard code...sorry future me
                 }
             }
         else:
@@ -507,21 +512,27 @@ class Mem0Memory:
             if provider_name == "openrouter":
                 # For OpenRouter, use the model name as-is (litellm handles the routing)
                 llm_config_dict = {
-                    "model": util_model_name,
-                    "temperature": 0.1,
-                    "max_tokens": 1000,
+                    "model": "openrouter/" + util_model_name,
+                    "temperature": 0.2,
+                    "max_tokens": 4096,
+                    "api_key": dotenv.get_dotenv_value("API_KEY_OPENROUTER"),
+                    "openrouter_base_url": "https://openrouter.ai/api/v1",  
                 }
             else:
                 llm_config_dict = {
-                    "model": util_model_name,
-                    "temperature": 0.1,
-                    "max_tokens": 1000,
+                    "model": "openrouter/" + util_model_name,
+                    "temperature": 0.2,
+                    "max_tokens": 4096,
+                    "api_key": dotenv.get_dotenv_value("API_KEY_OPENROUTER"),
+                    "openrouter_base_url": "https://openrouter.ai/api/v1",  
                 }
         else:
             llm_config_dict = {
-                "model": util_model_name,
-                "temperature": 0.1,
-                "max_tokens": 1000,
+                "model": "openrouter/" + util_model_name,
+                "temperature": 0.2,
+                "max_tokens": 4096,
+                "api_key": dotenv.get_dotenv_value("API_KEY_OPENROUTER"),
+                "openrouter_base_url": "https://openrouter.ai/api/v1",  
             }
         
         # For litellm, let it handle API key management through environment variables
@@ -859,9 +870,9 @@ class Mem0Memory:
                 return []  # Empty query returns no results
             
             # Debug information
-            PrintStyle.info(f"mem0 search starting with query: '{query[:100]}...' (type: {type(query)})")
-            PrintStyle.info(f"User ID: {self.user_id} (type: {type(self.user_id)})")
-            PrintStyle.info(f"Client type: {type(self.mem0_client)}")
+            #PrintStyle.info(f"mem0 search starting with query: '{query[:100]}...' (type: {type(query)})")
+            #PrintStyle.info(f"User ID: {self.user_id} (type: {type(self.user_id)})")
+            #PrintStyle.info(f"Client type: {type(self.mem0_client)}")
             
             # Apply rate limiting
             #await self.agent.rate_limiter(

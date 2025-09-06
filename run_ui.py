@@ -17,6 +17,13 @@ from python.helpers.api import ApiHandler
 from python.helpers.print_style import PrintStyle
 
 
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    category=DeprecationWarning,
+    module=r"httpx\._models",  # only suppress deprecations coming from httpx._models
+)
+
 # Set the new timezone to 'UTC'
 os.environ["TZ"] = "UTC"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
