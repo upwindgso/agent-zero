@@ -78,7 +78,7 @@ services:
       - mem0_network
     # Optional: bind mount your local repo for live development (uncomment and adjust path if needed)
     volumes:
-      - ./:/a0
+      - ${A0_PATH:-./.}:/a0
 # -docker network connect agent-zero_mem0_network <your app container_name>
 
 volumes:
