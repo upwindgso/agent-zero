@@ -19,6 +19,14 @@ class DockerServiceManager:
         self.required_services = ["mem0_store", "neo4j"]
         self.optional_services = ["openmemory-mcp"]
         
+        # Runtime environment and service endpoints
+        self.in_container = os.path.exists('/.dockerenv') or os.getenv('A0_IN_CONTAINER') == '1'
+        # Resolve service hosts and ports from environment, with sensible defaults
+        self.neo4j_host = os.getenv('NEO4J_HOST') or ('neo4j' if self.in_container else 'localhost')
+        self.neo4j_http_port = int(os.getenv('NEO4J_HTTP_PORT') or (7474 if self.in_container else 7475))
+        self.qdrant_host = os.getenv('QDRANT_HOST') or ('mem0_store' if self.in_container else 'localhost')
+        self.qdrant_http_port = int(os.getenv('QDRANT_HTTP_PORT') or 6333)
+    
     def is_docker_available(self) -> bool:
         """Check if Docker is installed and running"""
         try:
@@ -170,7 +178,8 @@ class DockerServiceManager:
         """Check if Neo4j is responding"""
         try:
             import requests
-            response = requests.get("http://localhost:7475", timeout=5)  # Updated port
+            url = f"http://{self.neo4j_host}:{self.neo4j_http_port}"
+            response = requests.get(url, timeout=5)
             return response.status_code == 200
         except:
             return False
@@ -179,7 +188,8 @@ class DockerServiceManager:
         """Check if Qdrant is responding"""
         try:
             import requests
-            response = requests.get("http://localhost:6333/collections", timeout=5)
+            url = f"http://{self.qdrant_host}:{self.qdrant_http_port}/collections"
+            response = requests.get(url, timeout=5)
             return response.status_code == 200
         except:
             return False
@@ -191,31 +201,44 @@ class DockerServiceManager:
             
         results = {}
         
-        # Check Docker availability first
-        if not self.is_docker_available():
-            PrintStyle.error("Docker is not available. Please install and start Docker.")
-            return {service: False for service in services}
-        
-        if not self.is_docker_compose_available():
-            PrintStyle.error("Docker Compose is not available. Please install Docker Compose.")
-            return {service: False for service in services}
-        
-        if not self.docker_compose_file.exists():
-            PrintStyle.error(f"Docker compose file not found: {self.docker_compose_file}")
-            return {service: False for service in services}
-        
+        # Determine if we can control docker compose in this environment
+        compose_capable = (
+            self.is_docker_available()
+            and self.is_docker_compose_available()
+            and self.docker_compose_file.exists()
+        )
+
+        if not compose_capable:
+            # Connectivity-only mode: don't attempt to run docker/compose; just check reachability
+            PrintStyle.hint("Compose not available; performing connectivity-only checks.")
+            for service in services:
+                PrintStyle.standard(f"Checking {service} service connectivity...")
+                running = False
+                if service == "neo4j":
+                    running = self.check_neo4j_health()
+                elif service == "mem0_store":
+                    running = self.check_qdrant_health()
+                else:
+                    running = False
+
+                if running:
+                    PrintStyle.standard(f"✅ {service} appears reachable")
+                    results[service] = True
+                else:
+                    PrintStyle.error(f"❌ {service} is not reachable")
+                    results[service] = False
+            return results
+
+        # Compose-capable path (original behavior)
         for service in services:
             PrintStyle.standard(f"Checking {service} service...")
-            
             status = self.get_service_status(service)
-            
             if status['running']:
                 PrintStyle.standard(f"✅ {service} is already running")
                 results[service] = True
             else:
                 PrintStyle.standard(f"🔄 {service} is not running, starting...")
                 success, message = self.start_service(service)
-                
                 if success:
                     PrintStyle.standard(f"✅ {message}")
                     results[service] = True

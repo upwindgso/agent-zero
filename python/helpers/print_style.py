@@ -127,7 +127,7 @@ class PrintStyle:
 
     @staticmethod
     def info(text: str):
-        PrintStyle(font_color="#0000FF", padding=True).print("Info: "+text)
+        PrintStyle(font_color="#D1D100", padding=True).print("Info: "+text)
 
     @staticmethod
     def success(text: str):

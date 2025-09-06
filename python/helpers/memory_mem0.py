@@ -97,6 +97,104 @@ class Mem0Memory:
         self.mem0_client = None
         self.user_id = self._get_user_id()
         
+    # --- Runtime environment helpers ---
+    def _in_container(self) -> bool:
+        """Best-effort detection of running inside a Docker container"""
+        import os
+        return os.path.exists('/.dockerenv') or os.getenv('A0_IN_CONTAINER') == '1'
+
+    def _default_qdrant_url(self) -> str:
+        """Default Qdrant HTTP URL based on runtime environment"""
+        if self._in_container():
+            return "http://mem0_store:6333"
+        return "http://localhost:6333"
+
+    def _default_neo4j_bolt_url(self) -> str:
+        """Default Neo4j bolt URL based on runtime environment"""
+        if self._in_container():
+            return "bolt://neo4j:7687"
+        return "bolt://localhost:7688"
+
+    def _qdrant_http_healthy(self, base_url: str, timeout: float = 3.0) -> bool:
+        PrintStyle.info(f"Qdrant base_url:{base_url}")
+        try:
+            import requests
+            r = requests.get(f"{base_url.rstrip('/')}/collections", timeout=timeout)
+            PrintStyle.info(f"Qdrant status_code:{r.status_code}")
+            return r.status_code == 200
+        except Exception as e:
+            PrintStyle.error(f"Qdrant health check error for {base_url}: {e.__class__.__name__}: {e}")
+            return False
+
+    def _tcp_port_open(self, host: str, port: int, timeout: float = 0.75) -> bool:
+        import socket
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except Exception:
+            return False
+
+    def _dns_resolves(self, host: str) -> bool:
+        import socket
+        try:
+            socket.getaddrinfo(host, None)
+            return True
+        except Exception:
+            return False
+
+    def _resolve_qdrant_url(self, settings) -> str:
+        """Resolve Qdrant base URL by honoring overrides and probing likely endpoints."""
+        import os
+        override = settings.get("mem0_qdrant_url") or os.getenv("MEM0_QDRANT_URL")
+        if override:
+            PrintStyle.info(f"Qdrant URL override detected: {override}")
+            # If override points to localhost but service-DNS is resolvable/healthy, prefer service-DNS
+            if "localhost" in override:
+                svc = "http://mem0_store:6333"
+                if self._dns_resolves("mem0_store") and self._qdrant_http_healthy(svc):
+                    PrintStyle.info("Using mem0_store service DNS for Qdrant instead of localhost override")
+                    return svc
+            return override
+        candidates = [
+            "http://mem0_store:6333",  # preferred when in the same Compose network
+            "http://localhost:6333",   # fallback when running on host
+        ]
+        for url in candidates:
+            PrintStyle.info(f"Probing Qdrant candidate: {url}")
+            if self._qdrant_http_healthy(url):
+                PrintStyle.info(f"Selected Qdrant URL: {url}")
+                return url
+        PrintStyle.info(f"Falling back to first Qdrant candidate: {candidates[0]}")
+        return candidates[0]
+
+    def _resolve_neo4j_bolt_url(self, settings) -> str:
+        """Resolve Neo4j bolt URL by honoring overrides and probing likely endpoints."""
+        import os
+        from urllib.parse import urlparse
+        override = settings.get("mem0_neo4j_url") or os.getenv("NEO4J_URL")
+        if override:
+            PrintStyle.info(f"Neo4j URL override detected: {override}")
+            # If override points to localhost but service-DNS is reachable, prefer service-DNS
+            if "localhost" in override and self._dns_resolves("neo4j") and self._tcp_port_open("neo4j", 7687):
+                PrintStyle.info("Using neo4j service DNS for Bolt instead of localhost override")
+                return "bolt://neo4j:7687"
+            return override
+        candidates = [
+            "bolt://neo4j:7687",      # preferred when in the same Compose network
+            "bolt://localhost:7688",  # host-mapped port from compose (7688:7687)
+        ]
+        for url in candidates:
+            parsed = urlparse(url)
+            host_port = parsed.netloc.split(":")
+            host = host_port[0]
+            port = int(host_port[1]) if len(host_port) > 1 else 7687
+            PrintStyle.info(f"Probing Neo4j candidate: {host}:{port}")
+            if self._tcp_port_open(host, port):
+                PrintStyle.info(f"Selected Neo4j Bolt URL: {url}")
+                return url
+        PrintStyle.info(f"Falling back to first Neo4j candidate: {candidates[0]}")
+        return candidates[0]
+
     async def initialize(self, log_item: LogItem | None = None):
         """Initialize mem0 client and configuration"""
         try:
@@ -265,12 +363,13 @@ class Mem0Memory:
         # Use remote vector stores to avoid conflicts
         vector_store_config = settings.get("mem0_vector_store_config", {})
         
-        # Default to remote Qdrant server
+        # Default to remote Qdrant server (env/container aware)
         if not vector_store_config:
+            qdrant_url = self._resolve_qdrant_url(settings)
             vector_store_config = {
                 "provider": "qdrant",
                 "config": {
-                    "url": settings.get("mem0_qdrant_url", "http://localhost:6333"),
+                    "url": qdrant_url,
                     "collection_name": f"agent_zero_{self.memory_subdir}",
                     "api_key": settings.get("mem0_qdrant_api_key")
                 }
@@ -280,19 +379,12 @@ class Mem0Memory:
     
     def _get_local_config(self, settings):
         """Get configuration for local mem0 with fallback to embedded alternatives"""
-        # Check if Qdrant service is available
-        try:
-            from python.helpers.docker_service_manager import docker_service_manager
-            service_status = docker_service_manager.get_service_status("mem0_store")
-            qdrant_available = service_status.get('running', False)
-        except:
-            qdrant_available = False
-        
-        if qdrant_available:
-            # Use external Qdrant service
-            qdrant_url = settings.get("mem0_qdrant_url", "http://localhost:6333")
+        # Resolve Qdrant URL from settings/env with smart resolution
+        qdrant_url = self._resolve_qdrant_url(settings)
+
+        # Try a lightweight HTTP health check instead of relying on docker compose ps
+        if self._qdrant_http_healthy(qdrant_url):
             collection_name = settings.get("mem0_qdrant_collection", f"mem0_{self.memory_subdir}")
-            
             vector_store_config = {
                 "provider": "qdrant",
                 "config": {
@@ -491,6 +583,15 @@ class Mem0Memory:
         graph_memory_config = self._get_graph_memory_config(settings)
         if graph_memory_config:
             config_dict["graph_store"] = graph_memory_config
+            try:
+                bolt_url = graph_memory_config.get("config", {}).get("url")
+                if bolt_url:
+                    PrintStyle.success(f"Graph memory ENABLED (Neo4j Bolt): {bolt_url}")
+                else:
+                    PrintStyle.success("Graph memory ENABLED (Neo4j Bolt URL unknown)")
+            except Exception:
+                # Non-fatal; continue silently
+                pass
         
         # Disable telemetry to prevent additional vector store conflicts
         config_dict["enable_telemetry"] = False
@@ -511,10 +612,10 @@ class Mem0Memory:
         
         import os
         
-        # Get Neo4j configuration from settings or environment  
-        # Use port 7688 as configured in docker-compose.yml
+        # Get Neo4j configuration from settings/env with smart URL resolution
+        bolt_url = self._resolve_neo4j_bolt_url(settings)
         neo4j_config = {
-            "url": settings.get("mem0_neo4j_url") or os.getenv("NEO4J_URL", "bolt://localhost:7688"),
+            "url": bolt_url,
             "username": settings.get("mem0_neo4j_username") or os.getenv("NEO4J_USERNAME", "neo4j"),
             "password": settings.get("mem0_neo4j_password") or os.getenv("NEO4J_PASSWORD", "mem0graph")
         }
@@ -763,9 +864,9 @@ class Mem0Memory:
             PrintStyle.info(f"Client type: {type(self.mem0_client)}")
             
             # Apply rate limiting
-            await self.agent.rate_limiter(
-                model_config=self.agent.config.embeddings_model, input=query
-            )
+            #await self.agent.rate_limiter(
+            #    model_config=self.agent.config.embeddings_model, input=query
+            #)
             
             # Search memories with mem0ai using retry logic
             try:
@@ -962,9 +1063,10 @@ class Mem0Memory:
             metadata["timestamp"] = self.get_timestamp()
             
             # Apply rate limiting
-            await self.agent.rate_limiter(
-                model_config=self.agent.config.embeddings_model, input=text
-            )
+            #await self.agent.rate_limiter(
+            #    model_config=self.agent.config.embeddings_model, input=text
+            #)
+            # => Seems like rate limiting got moved from the calls to the models.py as per https://github.com/agent0ai/agent-zero/commit/765470796304a044ff17fd240b5a848d44e4e081#diff-c2fede8e26fe3766f5aeb20060e6650877ace542535732d95bad63a0a2512cbd
             
             # Add memory to mem0ai using the correct API with retry logic
             result = await self._retry_api_call(
